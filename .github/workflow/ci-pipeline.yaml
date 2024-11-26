@@ -1,0 +1,55 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Build and Push Docker Image
+      run: |
+        IMAGE_TAG=$(date +%Y%m%d%H%M%S)
+        docker build -t batuhanacet/codeway-node-app:$IMAGE_TAG .
+        docker push batuhanacet/codeway-node-app:$IMAGE_TAG
+      env:
+        DOCKER_BUILDKIT: 1
+
+  update-helm-chart:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+
+    steps:
+    - name: Checkout Helm Repository
+      uses: actions/checkout@v3
+      with:
+        repository: https://github.com/your-org/helm-repo
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Update Helm Chart
+      run: |
+        IMAGE_TAG=$(date +%Y%m%d%H%M%S)
+        sed -i "s/tag: .*/tag: $IMAGE_TAG/" codeway-node-app/values.yaml
+
+    - name: Commit and Push Changes
+      run: |
+        git config --global user.email "actions@github.com"
+        git config --global user.name "GitHub Actions"
+        git add codeway-node-app/values.yaml
+        git commit -m "Update image tag to $IMAGE_TAG"
+        git push
